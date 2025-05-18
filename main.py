@@ -1,91 +1,52 @@
 import streamlit as st
-from streamlit_folium import st_folium
 import folium
+from streamlit_folium import st_folium
+import requests
+from datetime import datetime
 from utils import create_ics, people_icon
 
-# Dummydata
-events = [
-    {
-        "title": "Street Food Festival",
-        "lat": 56.1629,
-        "lon": 10.2039,
-        "start": "2025-06-15 17:00",
-        "location": "Aarhus Street Food",
-        "description": "Mad og musik i det fri",
-        "genre": "Mad",
-        "subcategory": "Festival",
-        "area": "Midtbyen",
-        "people": 800
-    },
-    {
-        "title": "Yoga i Botanisk Have",
-        "lat": 56.1678,
-        "lon": 10.1973,
-        "start": "2025-06-16 08:00",
-        "location": "Botanisk Have",
-        "description": "Morgenyoga for alle niveauer",
-        "genre": "Krop og sind",
-        "subcategory": "Workshop",
-        "area": "Trøjborg",
-        "people": 30
-    }
-]
+st.set_page_config(layout="wide")
+
+# Hent begivenheder fra Aarhus' åbne API
+def fetch_events():
+    url = "https://api.detskeriaarhus.dk/api/v2/events"
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        data = response.json()
+        events = []
+        for item in data:
+            event = {
+                "title": item.get("title", "Ingen titel"),
+                "lat": item.get("location", {}).get("latitude", 56.162939),
+                "lon": item.get("location", {}).get("longitude", 10.203921),
+                "start": item.get("start_time", "2025-06-01T20:00:00"),
+                "location": item.get("location", {}).get("name", "Ukendt sted"),
+                "description": item.get("description", ""),
+                "genre": item.get("category", {}).get("name", "Ukendt genre"),
+                "people": 100  # Dummy-tal
+            }
+            events.append(event)
+        return events
+    except requests.RequestException as e:
+        st.error(f"Fejl ved hentning af begivenheder: {e}")
+        return []
+
+events = fetch_events()
 
 # 🎛️ Filtrering
-with st.sidebar:
-    st.header("🎯 Filtrer")
-    genre = st.selectbox("🎭 Genre", ["Alle"] + sorted(set(e["genre"] for e in events)))
-    date = st.date_input("📅 Dato")
-    show_advanced = st.checkbox("Flere filtre", value=False)
+st.sidebar.header("🎯 Filtrer")
+genre = st.sidebar.selectbox("🎭 Genre", ["Alle"] + sorted(set(e["genre"] for e in events)))
+date = st.sidebar.date_input("📅 Dato", datetime.today())
 
-    if show_advanced:
-        subcategory = st.selectbox("🧩 Underkategori", ["Alle"] + sorted(set(e["subcategory"] for e in events)))
-        area = st.selectbox("📍 Område", ["Alle"] + sorted(set(e["area"] for e in events)))
-        people_range = st.selectbox("👥 Antal mennesker", ["Alle", "0–20", "20–50", "50–250", "250–1000", "1000+"])
-    else:
-        subcategory = area = people_range = "Alle"
-
-# 🌗 Tema toggle
-if "dark_mode" not in st.session_state:
-    st.session_state.dark_mode = False
-
-toggle = st.checkbox("🌙 Skift til mørkt tema" if not st.session_state.dark_mode else "🔆 Skift til lyst tema")
-
-if toggle:
-    st.session_state.dark_mode = not st.session_state.dark_mode
-
-st.markdown(
-    f"""
-    <style>
-        body {{
-            background-color: {'#1e1e1e' if st.session_state.dark_mode else '#f3f3f3'};
-            color: {'white' if st.session_state.dark_mode else 'black'};
-        }}
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-
-# 🔍 Filter logik
-def match(event):
-    return (
-        (genre == "Alle" or event["genre"] == genre)
-        and (subcategory == "Alle" or event["subcategory"] == subcategory)
-        and (area == "Alle" or event["area"] == area)
-        and (
-            people_range == "Alle" or
-            (people_range == "0–20" and event["people"] < 20) or
-            (people_range == "20–50" and 20 <= event["people"] < 50) or
-            (people_range == "50–250" and 50 <= event["people"] < 250) or
-            (people_range == "250–1000" and 250 <= event["people"] < 1000) or
-            (people_range == "1000+" and event["people"] >= 1000)
-        )
-    )
-
-filtered = list(filter(match, events))
+filtered = []
+for e in events:
+    event_date = datetime.fromisoformat(e["start"]).date()
+    if (genre == "Alle" or e["genre"] == genre) and event_date == date:
+        filtered.append(e)
 
 # 🗺️ Kort
-m = folium.Map(location=[56.1629, 10.2039], zoom_start=13)
+m = folium.Map(location=[56.162939, 10.203921], zoom_start=13)
 
 for e in filtered:
     popup_html = f"""
