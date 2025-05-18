@@ -1,78 +1,107 @@
 import streamlit as st
-import folium
 from streamlit_folium import st_folium
-from datetime import date
+import folium
+from utils import create_ics, people_icon
 
-st.set_page_config(layout="wide")
-
+# Dummydata
 events = [
     {
-        "navn": "Rock i Parken",
-        "lat": 56.162939,
-        "lng": 10.203921,
-        "genre": "🎵",
-        "dato": "2025-06-01",
-        "tid": "20:00",
-        "antal": "50–250",
-        "link": "https://example.com/rockiparken"
+        "title": "Street Food Festival",
+        "lat": 56.1629,
+        "lon": 10.2039,
+        "start": "2025-06-15 17:00",
+        "location": "Aarhus Street Food",
+        "description": "Mad og musik i det fri",
+        "genre": "Mad",
+        "subcategory": "Festival",
+        "area": "Midtbyen",
+        "people": 800
     },
     {
-        "navn": "Food Festival",
-        "lat": 56.155,
-        "lng": 10.210,
-        "genre": "🍔",
-        "dato": "2025-06-02",
-        "tid": "12:00",
-        "antal": "1000–10000",
-        "link": "https://example.com/foodfestival"
-    },
-    {
-        "navn": "Teateraften",
-        "lat": 56.162,
-        "lng": 10.195,
-        "genre": "🎭",
-        "dato": "2025-06-03",
-        "tid": "19:00",
-        "antal": "250–1000",
-        "link": "https://example.com/teateraften"
+        "title": "Yoga i Botanisk Have",
+        "lat": 56.1678,
+        "lon": 10.1973,
+        "start": "2025-06-16 08:00",
+        "location": "Botanisk Have",
+        "description": "Morgenyoga for alle niveauer",
+        "genre": "Krop og sind",
+        "subcategory": "Workshop",
+        "area": "Trøjborg",
+        "people": 30
     }
 ]
 
-col1, col2, col3 = st.columns(3)
+# 🎛️ Filtrering
+with st.sidebar:
+    st.header("🎯 Filtrer")
+    genre = st.selectbox("🎭 Genre", ["Alle"] + sorted(set(e["genre"] for e in events)))
+    date = st.date_input("📅 Dato")
+    show_advanced = st.checkbox("Flere filtre", value=False)
 
-with col1:
-    valgt_dato = st.date_input("📅 Dato", value=date.today())
+    if show_advanced:
+        subcategory = st.selectbox("🧩 Underkategori", ["Alle"] + sorted(set(e["subcategory"] for e in events)))
+        area = st.selectbox("📍 Område", ["Alle"] + sorted(set(e["area"] for e in events)))
+        people_range = st.selectbox("👥 Antal mennesker", ["Alle", "0–20", "20–50", "50–250", "250–1000", "1000+"])
+    else:
+        subcategory = area = people_range = "Alle"
 
-with col2:
-    valgt_genre = st.selectbox("🎭 Genre", ["Alle"] + list(set([e["genre"] for e in events])))
+# 🌗 Tema toggle
+if "dark_mode" not in st.session_state:
+    st.session_state.dark_mode = False
 
-with col3:
-    valgt_antal = st.selectbox("👥 Antal mennesker", ["Alle", "0–20", "20–50", "50–250", "250–1000", "1000–10000", "10000+"])
+toggle = st.checkbox("🌙 Skift til mørkt tema" if not st.session_state.dark_mode else "🔆 Skift til lyst tema")
 
-filtered = []
-for e in events:
-    if valgt_genre != "Alle" and e["genre"] != valgt_genre:
-        continue
-    if valgt_antal != "Alle" and e["antal"] != valgt_antal:
-        continue
-    if str(valgt_dato) != e["dato"]:
-        continue
-    filtered.append(e)
+if toggle:
+    st.session_state.dark_mode = not st.session_state.dark_mode
 
-m = folium.Map(location=[56.162939, 10.203921], zoom_start=13, control_scale=True)
+st.markdown(
+    f"""
+    <style>
+        body {{
+            background-color: {'#1e1e1e' if st.session_state.dark_mode else '#f3f3f3'};
+            color: {'white' if st.session_state.dark_mode else 'black'};
+        }}
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+# 🔍 Filter logik
+def match(event):
+    return (
+        (genre == "Alle" or event["genre"] == genre)
+        and (subcategory == "Alle" or event["subcategory"] == subcategory)
+        and (area == "Alle" or event["area"] == area)
+        and (
+            people_range == "Alle" or
+            (people_range == "0–20" and event["people"] < 20) or
+            (people_range == "20–50" and 20 <= event["people"] < 50) or
+            (people_range == "50–250" and 50 <= event["people"] < 250) or
+            (people_range == "250–1000" and 250 <= event["people"] < 1000) or
+            (people_range == "1000+" and event["people"] >= 1000)
+        )
+    )
+
+filtered = list(filter(match, events))
+
+# 🗺️ Kort
+m = folium.Map(location=[56.1629, 10.2039], zoom_start=13)
 
 for e in filtered:
     popup_html = f"""
-    <b>{e['genre']} {e['navn']}</b><br>
-    📅 {e['dato']} kl. {e['tid']}<br>
-    👥 {e['antal']}<br>
-    <a href="{e['link']}" target="_blank">Se begivenhed</a><br>
-    <a href="#">📅 Tilføj til kalender</a>
+    <b>{e['title']}</b><br>
+    {e['start']}<br>
+    {people_icon(e['people'])} {e['people']} personer<br>
+    {e['location']}<br>
+    <i>{e['description']}</i><br><br>
+    <a href="/{create_ics(e)}" download>📅 Tilføj til kalender</a>
     """
     folium.Marker(
-        location=[e['lat'], e['lng']],
+        location=[e["lat"], e["lon"]],
+        tooltip=e["title"],
         popup=popup_html,
-        icon=folium.DivIcon(html=f"<div style='font-size:24px'>{e['genre']}</div>")
+        icon=folium.DivIcon(html=f"""<div style="font-size:24px;">🎈</div>"""),
     ).add_to(m)
 
-st_folium(m, width=1200, height=700)
+st.title("🗓️ Hvad sker der i Aarhus?")
+st_folium(m, height=600)
