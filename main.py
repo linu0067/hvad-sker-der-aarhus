@@ -7,7 +7,7 @@ from utils import create_ics, people_icon
 
 st.set_page_config(layout="wide")
 
-# Hent begivenheder fra Aarhus' åbne API
+# Hent begivenheder fra API
 def fetch_events():
     url = "https://api.detskeriaarhus.dk/api/v2/events"
     try:
@@ -24,7 +24,7 @@ def fetch_events():
                 "location": item.get("location", {}).get("name", "Ukendt sted"),
                 "description": item.get("description", ""),
                 "genre": item.get("category", {}).get("name", "Ukendt genre"),
-                "people": 100  # Dummy-tal
+                "people": 100  # Placeholder, da API'et ikke angiver antal
             }
             events.append(event)
         return events
@@ -34,7 +34,7 @@ def fetch_events():
 
 events = fetch_events()
 
-# 🎛️ Filtrering
+# Filtrering
 st.sidebar.header("🎯 Filtrer")
 genre = st.sidebar.selectbox("🎭 Genre", ["Alle"] + sorted(set(e["genre"] for e in events)))
 date = st.sidebar.date_input("📅 Dato", datetime.today())
@@ -45,7 +45,7 @@ for e in events:
     if (genre == "Alle" or e["genre"] == genre) and event_date == date:
         filtered.append(e)
 
-# 🗺️ Kort
+# Kort
 m = folium.Map(location=[56.162939, 10.203921], zoom_start=13)
 
 for e in filtered:
